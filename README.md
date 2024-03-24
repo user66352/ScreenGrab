@@ -38,8 +38,8 @@ It's meant to simplify screen recordings with ffmpeg under X11.
  * when the specified time has elapsed recording will stop
  * to record for 1hr 25min and 5sec enter '01:25:05'
   
-A binary is now included that was created with 'PyInstaller'.
-It should run on a 64bit X11 Linux Desktop.
+A binary is now included that was created with 'PyInstaller'.  
+It should run on a 64bit X11 Linux Desktop.  
   
   
 ## Requirements
