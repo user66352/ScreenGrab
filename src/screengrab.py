@@ -511,8 +511,6 @@ class Actions:
             self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -i {display} -f alsa -i default {encoder_option}"
         else:
             self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f alsa -i default {encoder_option}"
-
-        #self.shell_command = f"ffmpeg -loglevel error -nostats -f x11grab -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f pulse -ac 2 -i default {encoder_option}"
         cmd = self.shell_command + output_info + tail
         self.p = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
         self.get_pid_array()
