@@ -1,6 +1,6 @@
 #!/usr/bin/python3
-# ver. 0.4.0
-version = '0.4.0'
+# ver. 0.5.1
+version = '0.5.1'
 
 import tkinter as tk
 from tkinter.constants import *
@@ -118,16 +118,37 @@ class FloatingWindow(tk.Toplevel):
     def coords(self):
         return (self.winfo_rootx(), self.winfo_rooty(), self.winfo_width(), self.winfo_height())
 
+class Pulse_Audio_Devices:
+    def __init__(self) -> None:
+        self.sources = self.get_sources()
+
+    def get_sources(self):
+        shell_command = f"pactl list sources | grep 'Name: '"
+        try:
+            device_list = os.popen(shell_command).readlines()
+        except BaseException as error:
+            print('Exception using pactl to determine Pulse Audio sources!')
+            print('To use Pulse Audio (if installed) pactl needs to be installed!')
+            print(f'Error: {error}')
+        paudio_devs = []
+        for e in device_list:
+            paudio_devs.append(e.split()[1])
+        return paudio_devs
+
 class gui:
+
     def __init__(self):
         self.root = tk.Tk()
         self.out_path = sys.path[0]
         self.format = "mp4"
         self.encoder = "default"
+        self.sound_server = "Alsa"
+        self.sound_device = "default"
         self.recorder = None
         self.recorder_options = {}
         self.selectionArea = (0, 0, 0, 0)
         self.timer = False
+        self.pulseAudio = Pulse_Audio_Devices()
         self.gui_create()
         self.root.protocol("WM_DELETE_WINDOW", self.cleanUp)
         self.root.mainloop()
@@ -160,11 +181,12 @@ class gui:
         rate = self.framerate_spinbox.get()
         self.recorder_options['time'] = self.timer_var.get()
         self.recorder_options['winid'] = self.winid_var.get()
-        self.recorder = Actions(self.selectionArea, path, self.format, self.encoder, rate, self.recorder_options)
+        self.recorder = Actions(self.selectionArea, path, self.format, self.encoder, rate, self.recorder_options, self.sound_server, self.sound_device)
         self.root.after(1000, self.updateStatus)
 
     def stopRecording(self):
         self.recorder.stop_recording()
+        del self.recorder
         self.recorder = None
         self.on_Record_Stop()
         self.status_bar.configure(text="Recording Stopped")
@@ -180,7 +202,13 @@ class gui:
         self.border_toggle.config(state=DISABLED)
         self.winid_entry.config(state=DISABLED)
         self.winid_toggle.config(state=DISABLED)
-
+        self.path_entry.config(state=DISABLED)
+        self.path_sel_btn.config(state=DISABLED)
+        self.sound_server_menu.config(state=DISABLED)
+        self.sound_device_menu.config(state=DISABLED)
+        self.container_menu.config(state=DISABLED)
+        self.encoder_select.config(state=DISABLED)
+        self.framerate_spinbox.config(state=DISABLED)
 
     def on_Record_Stop(self):
         self.button2.config(state=NORMAL)
@@ -190,6 +218,13 @@ class gui:
         self.border_toggle.config(state=NORMAL)
         self.timer_toggle.config(state=NORMAL)
         self.winid_toggle.config(state=NORMAL)
+        self.path_entry.config(state=NORMAL)
+        self.path_sel_btn.config(state=NORMAL)
+        self.sound_server_menu.config(state=NORMAL)
+        self.sound_device_menu.config(state=NORMAL)
+        self.container_menu.config(state=NORMAL)
+        self.encoder_select.config(state=NORMAL)
+        self.framerate_spinbox.config(state=NORMAL)
         if self.recorder_options['timer']:
             self.timer_entry.config(state=NORMAL)
         if self.recorder_options['record_window']:
@@ -211,6 +246,28 @@ class gui:
     def encoderSelect(self, e):
         self.encoder = e
         self.encoder_select.config(text=f"{e}")
+
+    def soundServerSelect(self, e):
+        gbc = '#0e345b'  # '#395f79'
+        txc = '#e7e6e6'  # '#efefef'
+
+        self.sound_server = e
+        self.sound_server_menu.config(text=f"{e}")
+        if e == 'Alsa':
+            sound_dev_list = ['default']
+        else:
+            sound_dev_list = self.pulseAudio.sources
+
+        # creating a new menu for audio device selection
+        inside_menu = tk.Menu(self.sound_device_menu, background=gbc, foreground=txc)
+        item_var = tk.StringVar()
+        for e in sound_dev_list:
+            inside_menu.add_radiobutton(label=e, variable=item_var, command=lambda e=e: self.soundDeviceSelect(e))
+        self.sound_device_menu["menu"] = inside_menu
+
+    def soundDeviceSelect(self, e):
+        self.sound_device = e
+        self.sound_device_menu.config(text=f'{e}')
 
     def toggleFullscreen(self):
         if self.toggle_var.get() == 1:
@@ -308,10 +365,37 @@ class gui:
         self.path_sel_btn = tk.Button(self.path_frame, text="Select", width=5, relief='raised', background=gbc, foreground=txc, activebackground=abc, command=self.outputPathSelection)
         self.path_sel_btn.grid(row=0, column=1, sticky=tk.EW, padx=5)
 
+        #Audio Device Selection
+        self.audio_setting_frame = tk.LabelFrame(self.root, text="Audio Device Selection", background=gbc, foreground=txc)
+        self.audio_setting_frame.grid(row=1, sticky=tk.EW, padx=5)
+
+        self.sound_server_lable = tk.Label(self.audio_setting_frame, text="Sound Server:", background=gbc, foreground=txc)
+        self.sound_server_lable.grid(row=0, column=0, padx=5, pady=(5,3))
+
+        self.sound_device_lable = tk.Label(self.audio_setting_frame, text="Sound Device:", background=gbc, foreground=txc)
+        self.sound_device_lable.grid(row=0, column=1, padx=5, pady=(5,3))
+
+        self.sound_server_menu = tk.Menubutton(self.audio_setting_frame, text=f"{self.sound_server}", width=10, relief='raised', background=gbc, foreground=txc, activebackground=abc)
+        sound_server_list = ['Alsa', 'Pulse']
+        inside_menu = tk.Menu(self.sound_server_menu, background=gbc, foreground=txc)
+        item_var = tk.StringVar()
+        for e in sound_server_list:
+            inside_menu.add_radiobutton(label=e, variable=item_var, command=lambda e=e: self.soundServerSelect(e))
+        self.sound_server_menu["menu"] = inside_menu
+        self.sound_server_menu.grid(row=1, column=0, padx=15, pady=(0,5))
+
+        self.sound_device_menu = tk.Menubutton(self.audio_setting_frame, text=f"{self.sound_device}", width=10, relief='raised', background=gbc, foreground=txc, activebackground=abc)
+        sound_device_list = ["default"]
+        inside_menu = tk.Menu(self.sound_device_menu, background=gbc, foreground=txc)
+        item_var = tk.StringVar()
+        for e in sound_device_list:
+            inside_menu.add_radiobutton(label=e, variable=item_var, command=lambda e=e: self.soundDeviceSelect(e))
+        self.sound_device_menu["menu"] = inside_menu
+        self.sound_device_menu.grid(row=1, column=1, padx=15, pady=(0,5))
 
         #Video Settings
         self.vsetting_frame = tk.LabelFrame(self.root, text="Video Settings", background=gbc, foreground=txc)
-        self.vsetting_frame.grid(row=1, sticky=tk.EW, padx=5)
+        self.vsetting_frame.grid(row=2, sticky=tk.EW, padx=5)
 
         self.container_label = tk.Label(self.vsetting_frame, text="Container Format:", background=gbc, foreground=txc)
         self.container_label.grid(row=0, column=0, padx=5, pady=(5,3))
@@ -348,7 +432,7 @@ class gui:
 
         # Recording Area Selection
         self.selection_frame = tk.LabelFrame(self.root, text="Recording Area", background=gbc, foreground=txc)
-        self.selection_frame.grid(row=2, sticky=tk.EW, padx=5)
+        self.selection_frame.grid(row=3, sticky=tk.EW, padx=5)
 
         self.area_label = tk.Label(self.selection_frame, text="Selected Area:", background=gbc, foreground=txc)
         self.area_label.grid(row=0, column=0, padx=5, pady=5)
@@ -369,7 +453,7 @@ class gui:
 
         # Recording Controls
         self.button_frame = tk.LabelFrame(self.root, text="Recording Controls", background=gbc, foreground=txc)
-        self.button_frame.grid(row=3, padx=5, sticky=tk.EW, pady=(0,5))
+        self.button_frame.grid(row=4, padx=5, sticky=tk.EW, pady=(0,5))
 
         #mouse
         self.mousetoggle_var = tk.IntVar()
@@ -416,10 +500,10 @@ class gui:
 
         # Status Bar
         self.status_bar = tk.Label(self.root, text="Select Recording Area", relief=FLAT, anchor=W, foreground="black", border=1)
-        self.status_bar.grid(row=4, column=0, sticky=EW, columnspan=3)
+        self.status_bar.grid(row=5, column=0, sticky=EW, columnspan=3)
 
 class Actions:
-    def __init__(self, selectionArea, path, format, encoder, rate, recorder_options):
+    def __init__(self, selectionArea, path, format, encoder, rate, recorder_options, sound_server, sound_device):
         self.x = selectionArea[0]
         self.y = selectionArea[1]
         self.width = selectionArea[2]
@@ -429,6 +513,8 @@ class Actions:
         self.out_path = path
         self.format = format
         self.encoder = encoder
+        self.sound_server = sound_server
+        self.sound_device = sound_device
         self.framerate = rate
         self.recordingSince = int(str(time.time()).split('.')[0])   # get current time in seconds
         self.pid = 0
@@ -441,7 +527,6 @@ class Actions:
                                 "libx265":"-c:v libx265 -preset faster -crf 17", \
                                 "mpeg4":"-c:v mpeg4 -vtag xvid -qscale:v 3"}
         self.start_recording()
-
 
     def get_timestamp(self):
         return datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -470,7 +555,7 @@ class Actions:
     def stop_recording(self):
         pid = str(self.pid)
         os.system(f"kill -2 {pid}")  # kill actual ffmpeg process, send 'CTRL + C'
-        self.p.kill()
+        self.p.terminate()
         self.p.wait()
         
     def formatPath(self, path):
@@ -508,11 +593,10 @@ class Actions:
         display = self.get_display()
         output_info = f" '{path}{filename}.{self.format}'"
         if self.recorder_options['winid']:
-            self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -i {display} -f alsa -i default {encoder_option}"
+            self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -i {display} -f {self.sound_server} -i {self.sound_device} {encoder_option}"
         else:
-            self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f alsa -i default {encoder_option}"
+            self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f {self.sound_server} -i {self.sound_device} {encoder_option}"
 
-        #self.shell_command = f"ffmpeg -loglevel error -nostats -f x11grab -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f pulse -ac 2 -i default {encoder_option}"
         cmd = self.shell_command + output_info + tail
         self.p = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
         self.get_pid_array()

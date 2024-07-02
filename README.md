@@ -41,6 +41,13 @@ It's meant to simplify screen recordings with ffmpeg under X11.
 A binary is now included that was created with 'PyInstaller'.
 It should run on a 64bit X11 Linux Desktop.
   
+### New in Ver. 0.5.1  
+  
+* added Sound Controls  
+  - no Sound Device other than 'default' selectable with Alsa  
+  - with Pulse Audio you have to choose a sound device manual, none is auto-selected  
+  - select one of the '*.monitor' devices to record system sound from speakers/headphones  
+* minor changes in GUI behavior  
   
 ## Requirements
 
