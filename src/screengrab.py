@@ -2,10 +2,6 @@
 # ver. 0.5.2
 version = '0.5.2'
 
-# ToDo:
-# - disable audio selection when recording starts
-# - integrate proper log file (?)
-
 import tkinter as tk
 from tkinter.constants import *
 from tkinter import filedialog
