@@ -1,6 +1,10 @@
 #!/usr/bin/python3
-# ver. 0.5.1
-version = '0.5.1'
+# ver. 0.5.2
+version = '0.5.2'
+
+# ToDo:
+# - disable audio selection when recording starts
+# - integrate proper log file (?)
 
 import tkinter as tk
 from tkinter.constants import *
@@ -11,56 +15,66 @@ import subprocess, sys, os
 
 
 class FloatingWindow(tk.Toplevel):
-    def __init__(self):
+    def __init__(self, area):
         super().__init__()
         self.overrideredirect(True)
-        self.center()
+        self.center(area)
         self.wait_visibility(self)
         self.wm_attributes('-alpha',0.55)
+        self.mouse_pos = [0,0]
 
-        self.label = tk.Label(self, text="Drag corners over capture area\nClick 'Apply Area' or press 'ENTER' when ready")
+        win_params = self.coords()
+        self.label = tk.Label(self, text=f"Drag corners over capture area\nClick 'Apply Area' or press 'ENTER' when ready\nPosition: {win_params[0]}x{win_params[1]}\nSize: {win_params[2]}x{win_params[3]}",bg='black',fg='yellow',cursor='fleur')
         self.label.pack(side="top", fill="both", expand=True)
+        self.label.bind("<Button-1>",lambda e, mode='click':self.OnMotion(e,mode))
+        self.label.bind("<B1-Motion>",lambda e, mode='move':self.OnMotion(e,mode))
 
-        self.grip_se = tk.Label(self, text="  ",bg='blue',fg='blue',cursor="cross")
+        self.grip_se = tk.Label(self, text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_se.place(relx=1.0, rely=1.0, anchor="se")
         self.grip_se.bind("<B1-Motion>",lambda e, mode='se':self.OnMotion(e,mode))
 
-        self.grip_e = tk.Label(self,text="  ",bg='green',fg='green',cursor="cross")
+        self.grip_e = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_e.place(relx=1.0, rely=0.5, anchor="e")
         self.grip_e.bind("<B1-Motion>",lambda e, mode='e':self.OnMotion(e,mode))
         
-        self.grip_ne = tk.Label(self,text="  ",bg='blue',fg='blue',cursor="cross")
+        self.grip_ne = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_ne.place(relx=1.0, rely=0, anchor="ne")
         self.grip_ne.bind("<B1-Motion>",lambda e, mode='ne':self.OnMotion(e,mode))
 
-        self.grip_n = tk.Label(self,text="  ",bg='green',fg='green',cursor="cross")
+        self.grip_n = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_n.place(relx=0.5, rely=0, anchor="n")
         self.grip_n.bind("<B1-Motion>",lambda e, mode='n':self.OnMotion(e,mode))
 
-        self.grip_nw = tk.Label(self,text="  ",bg='blue',fg='blue',cursor="cross")
+        self.grip_nw = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_nw.place(relx=0, rely=0, anchor="nw")
         self.grip_nw.bind("<B1-Motion>",lambda e, mode='nw':self.OnMotion(e,mode))
 
-        self.grip_w = tk.Label(self,text="  ",bg='green',fg='green',cursor="cross")
+        self.grip_w = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_w.place(relx=0, rely=0.5, anchor="w")
         self.grip_w.bind("<B1-Motion>",lambda e, mode='w':self.OnMotion(e,mode))
 
-        self.grip_sw = tk.Label(self,text="  ",bg='blue',fg='blue',cursor="cross")
+        self.grip_sw = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_sw.place(relx=0, rely=1, anchor="sw")
         self.grip_sw.bind("<B1-Motion>",lambda e, mode='sw':self.OnMotion(e,mode))
 
-        self.grip_s = tk.Label(self,text="  ",bg='green',fg='green',cursor="cross")
+        self.grip_s = tk.Label(self,text="  ",bg='cyan',fg='cyan',cursor="crosshair")
         self.grip_s.place(relx=0.5, rely=1, anchor="s")
         self.grip_s.bind("<B1-Motion>",lambda e, mode='s':self.OnMotion(e,mode))
+
 
     def OnMotion(self, event, mode):
         abs_x = self.winfo_pointerx() - self.winfo_rootx()
         abs_y = self.winfo_pointery() - self.winfo_rooty()
+        mouse_x = self.winfo_pointerx()
+        mouse_y = self.winfo_pointery()
         width = self.winfo_width()
         height= self.winfo_height()
         x = self.winfo_rootx()
         y = self.winfo_rooty()
-        
+
+        if mode == 'click':
+            self.mouse_pos = [abs_x, abs_y]
+
         if mode == 'se' and abs_x >0 and abs_y >0:
                 self.geometry("%sx%s" % (abs_x,abs_y))
                 
@@ -106,13 +120,29 @@ class FloatingWindow(tk.Toplevel):
             if height >0 and width >0:
                 self.geometry("%dx%d+%d+%d" % (width,height,x,y))
 
-    def center(self):
-        width = 300
-        height = 300
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        x_coordinate = (screen_width/2) - (width/2)
-        y_coordinate = (screen_height/2) - (height/2)
+        if mode == 'move':
+            move_x = -(self.mouse_pos[0]) + abs_x
+            move_y = -(self.mouse_pos[1]) + abs_y
+            x_coordinate = max(0, x + move_x)
+            y_coordinate = max(0, y + move_y)
+            self.geometry("%dx%d+%d+%d" % (width, height, x_coordinate, y_coordinate))
+
+        # Update win info
+        self.label.configure(text=f"Drag corners over capture area\nClick 'Apply Area' or press 'ENTER' when ready\n Position: {self.winfo_rootx()}x{self.winfo_rooty()}\nSize: {self.winfo_width()}x{self.winfo_height()}")
+
+    def center(self, area):
+        if area == (0, 0, 0, 0):
+            width = 300
+            height = 300
+            screen_width = self.winfo_screenwidth()
+            screen_height = self.winfo_screenheight()
+            x_coordinate = (screen_width/2) - (width/2)
+            y_coordinate = (screen_height/2) - (height/2)
+        else:
+            width = area[2]
+            height = area[3]
+            x_coordinate = area[0]
+            y_coordinate = area[1]
         self.geometry("%dx%d+%d+%d" % (width, height, x_coordinate, y_coordinate))
 
     def coords(self):
@@ -154,7 +184,7 @@ class gui:
         self.root.mainloop()
 
     def createSelectionWindow(self):
-        self.floater = FloatingWindow()
+        self.floater = FloatingWindow(self.selectionArea)
         self.button1.config(state=DISABLED)
         self.button2.config(state=DISABLED)
         self.button_apply.config(state=NORMAL)
