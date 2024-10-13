@@ -49,6 +49,13 @@ It should run on a 64bit X11 Linux Desktop.
   - select one of the '*.monitor' devices to record system sound from speakers/headphones  
 * minor changes in GUI behavior  
   
+### New in Ver. 0.5.2  
+  
+* selection window is now movable  
+* selection window is reopened with the previously selected coordinates  
+* minor tweaks to look and feel  
+  
+  
 ## Requirements
 
 Since ffmpeg is used for the actual screen recording, ffmpeg must be installed.  
