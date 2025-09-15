@@ -1,14 +1,17 @@
 #!/usr/bin/python3
-# ver. 0.5.2
-version = '0.5.2'
+# ver. 0.5.3
+version = '0.5.3'
 
+import threading
 import tkinter as tk
 from tkinter.constants import *
 from tkinter import filedialog
 from datetime import timedelta
+from threading import Thread
 import datetime, time
 import subprocess, sys, os
 
+ffmpeg_bin = 'ffmpeg' # set path to prefered ffmpeg binary, leave it at 'ffmpeg' for default system-wide ffmpeg found via $PATH
 
 class FloatingWindow(tk.Toplevel):
     def __init__(self, area):
@@ -171,6 +174,7 @@ class gui:
         self.sound_server = "Alsa"
         self.sound_device = "default"
         self.recorder = None
+        self.expect_recording = False
         self.recorder_options = {}
         self.selectionArea = (0, 0, 0, 0)
         self.timer = False
@@ -208,7 +212,16 @@ class gui:
         self.recorder_options['time'] = self.timer_var.get()
         self.recorder_options['winid'] = self.winid_var.get()
         self.recorder = Actions(self.selectionArea, path, self.format, self.encoder, rate, self.recorder_options, self.sound_server, self.sound_device)
-        self.root.after(1000, self.updateStatus)
+        if self.recorder.success:
+            self.expect_recording = True
+            self.root.after(1000, self.updateStatus)
+        else:
+            msg = self.recorder.ffmpeg_status_msg()
+            self.status_bar.configure(text=msg)
+            self.expect_recording = False
+            del self.recorder
+            self.recorder = None
+            self.on_Record_Stop()
 
     def stopRecording(self):
         self.recorder.stop_recording()
@@ -216,6 +229,7 @@ class gui:
         self.recorder = None
         self.on_Record_Stop()
         self.status_bar.configure(text="Recording Stopped")
+        self.expect_recording = False
 
     def on_Record_Start(self):
         self.button3.config(state=NORMAL)
@@ -343,10 +357,10 @@ class gui:
                 self.button2.config(state=DISABLED)
 
     def recording(self):
-        # test if recorder was already created, when recording is currently running
-        if self.recorder != None:
-            return True
-        else:
+        # test if recorder was already created or is currently running
+        try:
+            return self.recorder.fc.is_alive()
+        except AttributeError:
             return False
 
     def cleanUp(self):
@@ -366,6 +380,14 @@ class gui:
             msg = "Recording since: " + time_elapsed
             self.status_bar.configure(text=msg)
             self.root.after(1000, self.updateStatus)
+        if self.expect_recording and not self.recording():
+            time_now = int(str(now).split('.')[0])
+            time_dif = time_now - self.recorder.recordingSince
+            time_elapsed = "{:0>8}".format(str(timedelta(seconds=time_dif)))
+            msg = f'ffmpeg (pid {self.recorder.pid}) stopped unexpectedly at {time_elapsed}'
+            self.status_bar.configure(text=msg)
+            self.expect_recording = False
+            self.on_Record_Stop()
 
     def gui_create(self):
 
@@ -523,10 +545,39 @@ class gui:
         self.button3 = tk.Button(self.button_frame, text="Stop", width=15, state=DISABLED, command=self.stopRecording, background=gbc, foreground='red', activebackground='red')
         self.button3.grid(row=4, column=2, padx=5, pady=5)
 
-
         # Status Bar
         self.status_bar = tk.Label(self.root, text="Select Recording Area", relief=FLAT, anchor=W, foreground="black", border=1)
         self.status_bar.grid(row=5, column=0, sticky=EW, columnspan=3)
+
+class ffmpeg_control():
+    def __init__(self, args):
+        self.args = args
+        self.process = None
+        self.pid = 0
+        self.status = ''
+
+    def start_ffmpeg(self):
+        try:
+            self.process = subprocess.Popen(args=self.args, shell=False)
+            self.pid = self.process.pid
+            self.status = 'ffmpeg started'
+            return True
+        except BaseException as e:
+            sys.stderr.write(f'Exception while starting ffmpeg: {e}\n')
+            self.status = 'error starting ffmpeg, check stderr'
+            return False
+
+    def stop_ffmpeg(self):
+        self.process.send_signal(2)     # equivalent to CTRL+C for graceful shutdown
+        try:
+            self.process.wait(timeout=5)
+            self.status = 'ffmpeg stopped normally'
+        except TimeoutExpired:
+            self.process.kill()
+            self.status = 'ffmpeg killed due to timeout'
+
+    def is_alive(self):
+        return self.process.poll() == None
 
 class Actions:
     def __init__(self, selectionArea, path, format, encoder, rate, recorder_options, sound_server, sound_device):
@@ -535,7 +586,7 @@ class Actions:
         self.width = selectionArea[2]
         self.height = selectionArea[3]
         self.recorder_options = recorder_options
-        self.ffmpeg_bin = 'ffmpeg' # set path to prefered ffmpeg binary, leave it at 'ffmpeg' for default system-wide ffmpeg found via $PATH
+        self.ffmpeg_bin = ffmpeg_bin
         self.out_path = path
         self.format = format
         self.encoder = encoder
@@ -544,6 +595,8 @@ class Actions:
         self.framerate = rate
         self.recordingSince = int(str(time.time()).split('.')[0])   # get current time in seconds
         self.pid = 0
+        self.fc = None
+        self.success = False
         self.stop_time = 0
         self.encoder_option = {"default":"", \
                                 "libx264":"-c:v libx264 -preset faster -crf 17", \
@@ -560,29 +613,13 @@ class Actions:
     def timestr_to_seconds(self, timestr):
         return sum(x * int(t) for x, t in zip([3600, 60, 1], timestr.split(":")))
 
-    def get_pid_array(self):
-        ps_command = f"ps aux | grep ffmpeg | grep -v grep"
-        proc_list = os.popen(ps_command).readlines()
-        tmp_list = []
-        self.pid_array = []
-        #remove \n from line
-        for line in proc_list:
-            tmp_list.append(line.strip())
-        #select only screengrab ffmpeg proccesses
-        for line in tmp_list:
-            if (self.shell_command in line):
-                self.pid_array.append(int(line.split()[1]))
-
     def get_display(self):
         cmd = "echo $DISPLAY"
         display = os.popen(cmd).readline().strip()
         return display
 
     def stop_recording(self):
-        pid = str(self.pid)
-        os.system(f"kill -2 {pid}")  # kill actual ffmpeg process, send 'CTRL + C'
-        self.p.terminate()
-        self.p.wait()
+        self.fc.stop_ffmpeg()
         
     def formatPath(self, path):
         if path[-1] != "/":
@@ -609,24 +646,26 @@ class Actions:
             ttl = self.timestr_to_seconds(self.recorder_options['time'])
             self.stop_time = int(now) + ttl
 
+    def ffmpeg_status_msg(self):
+        return self.fc.status
+
     def start_recording(self):
         self.set_timer()
         path = self.formatPath(self.out_path)
-        tail = " >> ffmpeg_err.log 2>&1"
         filename = "screengrab_{timestamp}".format(timestamp=self.get_timestamp())
         encoder_option = self.encoder_option[self.encoder]
         recording_options = self.get_recording_options()   # show mouse pointer | show recording region
         display = self.get_display()
-        output_info = f" '{path}{filename}.{self.format}'"
+        output_info = f' {path}{filename}.{self.format}'
         if self.recorder_options['winid']:
-            self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -i {display} -f {self.sound_server} -i {self.sound_device} {encoder_option}"
+            self.shell_command = f"{self.ffmpeg_bin} -hide_banner -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -i {display} -f {self.sound_server} -i {self.sound_device} {encoder_option}"
         else:
-            self.shell_command = f"{self.ffmpeg_bin} -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f {self.sound_server} -i {self.sound_device} {encoder_option}"
-
-        cmd = self.shell_command + output_info + tail
-        self.p = subprocess.Popen(cmd, shell=True, stderr=subprocess.PIPE)
-        self.get_pid_array()
-        self.pid = max(self.pid_array)
+            self.shell_command = f"{self.ffmpeg_bin} -hide_banner -loglevel error -nostats -f x11grab {recording_options} -framerate {self.framerate} -video_size {self.width}x{self.height} -i {display}+{self.x},{self.y} -f {self.sound_server} -i {self.sound_device} {encoder_option}"
+        cmd = self.shell_command + output_info
+        args = cmd.split()
+        self.fc = ffmpeg_control(args)
+        self.success = self.fc.start_ffmpeg()
+        self.pid = self.fc.pid
 
 def main():
     gui()

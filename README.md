@@ -3,6 +3,7 @@
 ScreenGrab is a simple python tkinter GUI for ffmpeg and Linux.  
 It's meant to simplify screen recordings with ffmpeg under X11.  
   
+![Screesnhot](assets/Screenshot.png)
   
 ## Features
   
@@ -55,6 +56,11 @@ It should run on a 64bit X11 Linux Desktop.
 * selection window is reopened with the previously selected coordinates  
 * minor tweaks to look and feel  
   
+### New in Ver. 0.5.3 
+
+* no functional updates  
+* ScreenGrab before did not detect an unexpected ffmpeg exit, thats now being anounced  
+* enhanced ffmpeg process handling and monitoring  
   
 ## Requirements
 
