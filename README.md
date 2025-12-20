@@ -61,6 +61,11 @@ It should run on a 64bit X11 Linux Desktop.
 * no functional updates  
 * ScreenGrab before did not detect an unexpected ffmpeg exit, thats now being anounced  
 * enhanced ffmpeg process handling and monitoring  
+
+### New in Ver. 0.5.4  
+
+* if `xwininfo` is installed and found in $PATH it can be called now from the GUI when selecting 'Record Win ID'  
+* the user's home directory is now preselected as output directory
   
 ## Requirements
 

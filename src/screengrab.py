@@ -1,14 +1,14 @@
 #!/usr/bin/python3
-# ver. 0.5.3
-version = '0.5.3'
+# ver. 0.5.4
+version = '0.5.4'
 
-import threading
 import tkinter as tk
 from tkinter.constants import *
 from tkinter import filedialog
 from datetime import timedelta
-from threading import Thread
 import datetime, time
+from io import StringIO
+import shutil
 import subprocess, sys, os
 
 ffmpeg_bin = 'ffmpeg' # set path to prefered ffmpeg binary, leave it at 'ffmpeg' for default system-wide ffmpeg found via $PATH
@@ -168,7 +168,8 @@ class gui:
 
     def __init__(self):
         self.root = tk.Tk()
-        self.out_path = sys.path[0]
+        self.xwininfo_path = shutil.which('xwininfo')
+        self.out_path = os.getenv("HOME")
         self.format = "mp4"
         self.encoder = "default"
         self.sound_server = "Alsa"
@@ -182,6 +183,20 @@ class gui:
         self.gui_create()
         self.root.protocol("WM_DELETE_WINDOW", self.cleanUp)
         self.root.mainloop()
+
+    def callXwininfo(self):
+        try:
+            res = subprocess.run([self.xwininfo_path], stdout=subprocess.PIPE).stdout.decode('utf-8')
+        except BaseException as e:
+            self.status_bar.configure(text='Error opening xwininfo! Check stderr for more info.')
+            sys.stderr.write(f'Error opening xwininfo!\n')
+            sys.stderr.write(f'Exception:\n{e}\n')
+            return
+        lines = StringIO(res)
+        for line in lines:
+            if "Window id:" in line:
+                self.winid_entry.delete(0, tk.END)
+                self.winid_entry.insert(0, line.split()[3])
 
     def createSelectionWindow(self):
         self.floater = FloatingWindow(self.selectionArea)
@@ -210,7 +225,10 @@ class gui:
         path = self.input_variable.get()
         rate = self.framerate_spinbox.get()
         self.recorder_options['time'] = self.timer_var.get()
-        self.recorder_options['winid'] = self.winid_var.get()
+        if self.winidtoggle_var.get() == 1:
+            self.recorder_options['winid'] = self.winid_var.get()
+        else:
+            self.recorder_options['winid'] = ''
         self.recorder = Actions(self.selectionArea, path, self.format, self.encoder, rate, self.recorder_options, self.sound_server, self.sound_device)
         if self.recorder.success:
             self.expect_recording = True
@@ -275,7 +293,7 @@ class gui:
                 self.button1.config(state=NORMAL)
 
     def outputPathSelection(self):
-        self.out_path = filedialog.askdirectory()
+        self.out_path = filedialog.askdirectory(title="Select Output Directory", initialdir=self.out_path)
         self.path_entry.delete(0,END)
         self.path_entry.insert(END, self.out_path)
 
@@ -346,11 +364,14 @@ class gui:
             self.winid_entry.config(state=NORMAL)
             self.button2.config(state=NORMAL)
             self.button1.config(state=DISABLED)
+            if self.xwininfo_path != None: self.button_call_xwininfo.config(state=NORMAL)
             self.fullscreen_toggle.config(state=DISABLED)
             self.recorder_options['record_window'] = True
         else:
+            self.recorder_options['winid'] = ''
             self.winid_entry.config(state=DISABLED)
             self.button1.config(state=NORMAL)
+            self.button_call_xwininfo.config(state=DISABLED)
             self.fullscreen_toggle.config(state=NORMAL)
             self.recorder_options['record_window'] = False
             if self.selectionArea == (0, 0, 0, 0):
@@ -367,6 +388,7 @@ class gui:
         if self.recording():
             self.stopRecording()
         self.root.destroy()
+        sys.exit(0)
 
     def updateStatus(self):
         now = int(time.time())
@@ -525,6 +547,9 @@ class gui:
         self.winid_entry = tk.Entry(self.button_frame, textvariable=self.winid_var, justify=tk.CENTER,  insertofftime=0, width=9)
         self.winid_entry.config(state=DISABLED)
         self.winid_entry.grid(row=2, column=2, sticky=tk.W, padx=5, pady=5)
+
+        self.button_call_xwininfo = tk.Button(self.button_frame, text="xwininfo", width=10, state=DISABLED, command=self.callXwininfo, background=gbc, foreground=txc, activebackground=abc)
+        self.button_call_xwininfo.grid(row=2, column=3, padx=5, pady=5)
 
         #timer
         self.timertoggle_var = tk.IntVar()
